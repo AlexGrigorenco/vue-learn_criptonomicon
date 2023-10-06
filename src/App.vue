@@ -69,11 +69,15 @@
         <div
         v-for="myTicker of myTickers"
         :key="myTicker.id"
+        @click="selectTicker(myTicker)"
+        :class="{
+          'border-4' : select === myTicker,
+        }"
           class="bg-white overflow-hidden shadow rounded-lg border-purple-800 border-solid cursor-pointer"
         >
           <div class="px-4 py-5 sm:p-6 text-center">
             <dt class="text-sm font-medium text-gray-500 truncate">
-              {{ myTicker.title }}
+              {{ myTicker.title }} - USD
             </dt>
             <dd class="mt-1 text-3xl font-semibold text-gray-900">
               {{ myTicker.price }}
@@ -101,25 +105,21 @@
       </dl>
       <hr class="w-full border-t border-gray-600 my-4" />
       </template>
-    <section class="relative">
+    <section
+    v-if="select" class="relative">
       <h3 class="text-lg leading-6 font-medium text-gray-900 my-8">
-        VUE - USD
+        {{ select.title}} - USD
       </h3>
       <div class="flex items-end border-gray-600 border-b border-l h-64">
         <div
-          class="bg-purple-800 border w-10 h-24"
-        ></div>
-        <div
-          class="bg-purple-800 border w-10 h-32"
-        ></div>
-        <div
-          class="bg-purple-800 border w-10 h-48"
-        ></div>
-        <div
-          class="bg-purple-800 border w-10 h-16"
+          v-for="(bar, i) of normalazeGraph()"
+          :key="i"
+          :style="{ height: `${bar}%`}"
+          class="bg-purple-800 border w-10"
         ></div>
       </div>
       <button
+        @click="select = null"
         type="button"
         class="absolute top-0 right-0"
       >
@@ -160,35 +160,58 @@ export default {
       myTickers: [
         {
           id: 1,
-          title: 'demo1-USD',
+          title: 'demo1',
           price: '-',
         },
         {
           id: 2,
-          title: 'demo2-USD',
+          title: 'demo2',
           price: '-',
         },
         {
           id: 3,
-          title: 'demo3-USD',
+          title: 'demo3',
           price: '-',
         },
-      ]
+      ],
+      select: null,
+      graph: [],
     }
   },
   methods: {
     add(){
       const newTicker = {
         id: Date.now(),
-        title: this.ticker + '-USD',
+        title: this.ticker.toUpperCase(),
         price: '-'
       }
       this.myTickers.push(newTicker);
+      setInterval(async() => {
+        const f = await fetch(`https://min-api.cryptocompare.com/data/price?fsym=${newTicker.title}&tsyms=USD`);
+        const data = await f.json();
+        this.myTickers.find(ticker => ticker.title === newTicker.title).price = data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
+
+        if(this.select?.title === newTicker.title){
+          this.graph.push(data.USD)
+        }
+      }, 1000)
       this.ticker = '';
     },
+
+    selectTicker(ticker){
+      this.select = ticker;
+      this.graph = [];
+    },
+
     deleteTicker(id){
       this.myTickers = this.myTickers.filter(ticker => ticker.id !== id)
-    }
+    },
+
+    normalazeGraph(){
+      const maxVal = Math.max(...this.graph);
+      const minVal = Math.min(...this.graph);
+      return this.graph.map(price => (5 +(price - minVal) * 95 / (maxVal - minVal)))
+    },
   }
 }
 </script>
