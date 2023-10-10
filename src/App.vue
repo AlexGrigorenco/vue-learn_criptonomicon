@@ -1,6 +1,8 @@
 <template>
   <div class="container mx-auto flex flex-col items-center bg-gray-100 p-4">
-  <div style="display: none" class="loader fixed w-100 h-100 opacity-80 bg-purple-800 inset-0 z-50 flex items-center justify-center">
+  <div 
+  v-if="!coinList"
+  class="loader fixed w-100 h-100 opacity-90 bg-purple-900 inset-0 z-50 flex items-center justify-center">
     <svg class="animate-spin -ml-1 mr-3 h-12 w-12 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
       <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
       <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -16,7 +18,8 @@
           <div class="mt-1 relative rounded-md shadow-md">
             <input
              v-model="ticker"
-             @keydown.enter="add"
+             @keydown.enter="add(ticker)"
+             @input="handleInputChange"
               type="text"
               name="wallet"
               id="wallet"
@@ -24,22 +27,27 @@
               placeholder="Например DOGE"
             />
           </div>
-          <div class="flex bg-white shadow-md p-1 rounded-md shadow-md flex-wrap">
-            <span class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer">
-              BTC
+          <div 
+          v-if="hasClues"
+          class="flex bg-white p-1 rounded-md flex-wrap">
+
+            <span 
+            v-for="(clue, i) of clues"
+            :key="i"
+            @click="clickToClue(clue)"
+            class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer">
+              {{clue}}
             </span>
-            <span class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer">
-              DOGE
-            </span>
-            <span class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer">
-              BCH
-            </span>
-            <span class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer">
-              CHD
-            </span>
+
           </div>
-          <div class="text-sm text-red-600">Такой тикер уже добавлен</div>
+          <div 
+          v-if="addedTicker"
+          class="text-sm text-red-600">Такой тикер уже добавлен</div>
+          <div 
+          v-if="notExistCoin"
+          class="text-sm text-red-600">Такой монеты не существует</div>
         </div>
+        
       </div>
       <button
         @click="add"
@@ -176,26 +184,55 @@ export default {
       ],
       select: null,
       graph: [],
+      coinList: null,
+      addedTicker: false,
+      notExistCoin: false,
+      clues: [],
+      hasClues: false,
     }
   },
+  created: async function(){
+      const f = await fetch(`https://min-api.cryptocompare.com/data/all/coinlist?summary=true&api_key=0c306692dcb0454412241eb93b1398b038e292c74c66c2ded01cfba0d11859eb`);
+      const data = await f.json();
+      this.coinList = Object.values(data.Data).map(item => item.Symbol);
+    },
+  
   methods: {
-    add(){
+    add(ticker){
       const newTicker = {
         id: Date.now(),
-        title: this.ticker.toUpperCase(),
+        title: ticker.toUpperCase(),
         price: '-'
       }
-      this.myTickers.push(newTicker);
-      setInterval(async() => {
-        const f = await fetch(`https://min-api.cryptocompare.com/data/price?fsym=${newTicker.title}&tsyms=USD`);
-        const data = await f.json();
-        this.myTickers.find(ticker => ticker.title === newTicker.title).price = data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
+      if(!this.addedTicker && !this.notExistCoin){
+          this.myTickers.push(newTicker);
+        setInterval(async() => {
+          const f = await fetch(`https://min-api.cryptocompare.com/data/price?fsym=${newTicker.title}&tsyms=USD&api_key=0c306692dcb0454412241eb93b1398b038e292c74c66c2ded01cfba0d11859eb`);
+          const data = await f.json();
+          if(data.Response === "Error"){
+            this.myTickers.find(ticker => ticker.title === newTicker.title).price = "нет данных";
+          }else{
+              this.myTickers.find(ticker => ticker.title === newTicker.title).price = data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
 
-        if(this.select?.title === newTicker.title){
-          this.graph.push(data.USD)
-        }
-      }, 1000)
-      this.ticker = '';
+            if(this.select?.title === newTicker.title){
+              this.graph.push(data.USD)
+          }
+          }
+          
+        }, 3000)
+        this.ticker = '';
+        this.clues = [];
+        this.hasClues = false;   
+      }      
+    },
+
+    clickToClue(clue){
+      this.ticker = clue;
+      this.validateCoin();
+      this.add(this.ticker);
+
+      this.clues = [];
+      this.hasClues = false;
     },
 
     selectTicker(ticker){
@@ -212,6 +249,23 @@ export default {
       const minVal = Math.min(...this.graph);
       return this.graph.map(price => (5 +(price - minVal) * 95 / (maxVal - minVal)))
     },
+
+    handleInputChange() {
+      this.validateCoin()
+
+      this.clues = this.coinList.filter(coin => coin.includes(this.ticker.toUpperCase())).slice(0, 4);
+      this.clues.length ? this.hasClues = true : this.hasClues = false;
+    },
+
+    validateCoin(){
+      this.addedTicker = this.myTickers.some(obj => obj.title === this.ticker.toUpperCase());
+      
+      if(this.coinList.includes(this.ticker.toUpperCase()) || this.ticker === ''){
+        this.notExistCoin = false;
+      }else{
+        this.notExistCoin = true;
+      }
+    }
   }
 }
 </script>
