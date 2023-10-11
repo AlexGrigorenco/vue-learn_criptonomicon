@@ -77,9 +77,14 @@
           Фильтрация: 
           <input 
           v-model="filter"
+          @input="page = 1"
           class="block w-full pr-10 border-gray-300 text-gray-900 focus:outline-none focus:ring-gray-500 focus:border-gray-500 sm:text-sm rounded-md"
           type="text"/>
         </div>
+        <div
+        v-if="!filteredCoins.length"
+        class="text-red-700 "
+        >по вашему запросу не найдено ни одной монеты, измените параметры поиска</div>
         <hr class="w-full border-t border-gray-600 my-4" />
         <div class="flex items-center gap-[20px]">
           <button
@@ -96,7 +101,7 @@
       <dl class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
         
         <div
-        v-for="myTicker of filteredCoins()"
+        v-for="myTicker of paginatedCoins"
         :key="myTicker.id"
         @click="selectTicker(myTicker)"
         :class="{
@@ -144,7 +149,7 @@
       </h3>
       <div class="flex items-end border-gray-600 border-b border-l h-64">
         <div
-          v-for="(bar, i) of normalazeGraph()"
+          v-for="(bar, i) of normalazedGraph"
           :key="i"
           :style="{ height: `${bar}%`}"
           class="bg-purple-800 border w-10"
@@ -189,24 +194,28 @@ export default {
   data(){
     return {
       ticker: '',
+      filter: '',
+
       myTickers: [],
       select: null,
+      
       graph: [],
       coinList: null,
       addedTicker: false,
+
       notExistCoin: false,
+
       clues: [],
       hasClues: false,
-      filter: '',
+      
       page: 1,
-      hasNextPage: true,
     }
   },
   created: async function(){
       const windowData = Object.fromEntries(new URL(window.location).searchParams.entries());
 
       windowData.filter ? this.filter = windowData.filter : null;
-      windowData.page ? this.page = windowData.page : null;
+      windowData.page ? this.page = +windowData.page : null;
 
       const f = await fetch(`https://min-api.cryptocompare.com/data/all/coinlist?summary=true&api_key=0c306692dcb0454412241eb93b1398b038e292c74c66c2ded01cfba0d11859eb`);
       const data = await f.json();
@@ -220,8 +229,42 @@ export default {
         // })
       }
     },
+
+    computed: {
+
+      startIndex(){
+        return (this.page - 1) * 6;
+      },
+      endIndex(){
+        return this.page * 6;
+      },
+
+      filteredCoins(){
+        return this.myTickers.filter(myTicker => myTicker.title.includes(this.filter.toUpperCase()));       
+      },
+
+      paginatedCoins(){
+        return this.filteredCoins.slice(this.startIndex, this.endIndex);
+      },
+
+      hasNextPage(){
+        return this.filteredCoins.length > this.endIndex;
+      },
+
+      normalazedGraph(){
+        const maxVal = Math.max(...this.graph);
+        const minVal = Math.min(...this.graph);
+
+        if(minVal === maxVal){
+          return this.graph.map(() => 50);
+        }
+
+        return this.graph.map(price => (5 +(price - minVal) * 95 / (maxVal - minVal)));
+      },
+    },
   
   methods: {
+
     add(ticker){
       const newTicker = {
         id: Date.now(),
@@ -230,9 +273,7 @@ export default {
       }
       if(!this.addedTicker && !this.notExistCoin){
 
-          this.myTickers.push(newTicker);
-
-          localStorage.setItem('coin-list', JSON.stringify(this.myTickers));
+          this.myTickers = [...this.myTickers, newTicker];
 
           this.subscribeToUpdates(newTicker.title);
         
@@ -275,13 +316,9 @@ export default {
     },
 
     deleteTicker(id){
-      this.myTickers = this.myTickers.filter(ticker => ticker.id !== id)
-    },
-
-    normalazeGraph(){
-      const maxVal = Math.max(...this.graph);
-      const minVal = Math.min(...this.graph);
-      return this.graph.map(price => (5 +(price - minVal) * 95 / (maxVal - minVal)))
+      this.myTickers = this.myTickers.filter(ticker => ticker.id !== id);
+      
+      this.select?.id === id ? this.select = null : null;
     },
 
     handleInputChange() {
@@ -301,15 +338,6 @@ export default {
       }
     },
 
-    filteredCoins(){
-      const start = (this.page - 1) * 6;
-      const end = this.page * 6;
-      const filteredTickers = this.myTickers.filter(myTicker => myTicker.title.includes(this.filter.toUpperCase()));
-
-      this.hasNextPage = filteredTickers.length > end;
-      
-      return filteredTickers.slice(start, end);
-    },
     setUrlParams(){
       window.history.pushState(null, document.title, `${window.location.pathname}?filter=${this.filter}&page=${this.page}`);
     }
@@ -317,11 +345,16 @@ export default {
 
   watch: {
     filter(){
-      this.page = 1;
       this.setUrlParams();
     },
     page(){
       this.setUrlParams();
+    },
+    myTickers(){
+      if(this.paginatedCoins.length === 0 && this.page > 1){
+        this.page -= 1;
+      }
+      localStorage.setItem('coin-list', JSON.stringify(this.myTickers));
     }
   }
 }
