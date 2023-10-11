@@ -73,9 +73,30 @@
 
       <template v-if="myTickers.length">
         <hr class="w-full border-t border-gray-600 my-4" />
+        <div class="flex items-center gap-[20px]">
+          Фильтрация: 
+          <input 
+          v-model="filter"
+          class="block w-full pr-10 border-gray-300 text-gray-900 focus:outline-none focus:ring-gray-500 focus:border-gray-500 sm:text-sm rounded-md"
+          type="text"/>
+        </div>
+        <hr class="w-full border-t border-gray-600 my-4" />
+        <div class="flex items-center gap-[20px]">
+          <button
+          v-if="page > 1"
+          @click="page = page - 1"
+          class="my-4 inline-flex items-center py-2 px-4 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-full text-white bg-gray-600 hover:bg-gray-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">
+          Назад</button>
+          <button
+          v-if="hasNextPage"
+          @click="page = page + 1"
+          class="my-4 inline-flex items-center py-2 px-4 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-full text-white bg-gray-600 hover:bg-gray-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">
+          Вперед</button>
+        </div>
       <dl class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
+        
         <div
-        v-for="myTicker of myTickers"
+        v-for="myTicker of filteredCoins()"
         :key="myTicker.id"
         @click="selectTicker(myTicker)"
         :class="{
@@ -109,6 +130,9 @@
                 clip-rule="evenodd"
               ></path></svg>Удалить
           </button>
+        </div>
+        <div style="grid-column: 1 / -1;">
+          стр.{{ page }}
         </div>
       </dl>
       <hr class="w-full border-t border-gray-600 my-4" />
@@ -173,9 +197,17 @@ export default {
       notExistCoin: false,
       clues: [],
       hasClues: false,
+      filter: '',
+      page: 1,
+      hasNextPage: true,
     }
   },
   created: async function(){
+      const windowData = Object.fromEntries(new URL(window.location).searchParams.entries());
+
+      windowData.filter ? this.filter = windowData.filter : null;
+      windowData.page ? this.page = windowData.page : null;
+
       const f = await fetch(`https://min-api.cryptocompare.com/data/all/coinlist?summary=true&api_key=0c306692dcb0454412241eb93b1398b038e292c74c66c2ded01cfba0d11859eb`);
       const data = await f.json();
       this.coinList = Object.values(data.Data).map(item => item.Symbol);
@@ -183,9 +215,9 @@ export default {
       const tickersData = localStorage.getItem('coin-list');
       if(tickersData){
         this.myTickers = JSON.parse(tickersData);
-        this.myTickers.forEach(ticker => {
-          this.subscribeToUpdates(ticker.title);
-        })
+        // this.myTickers.forEach(ticker => {
+        //   this.subscribeToUpdates(ticker.title);
+        // })
       }
     },
   
@@ -206,7 +238,8 @@ export default {
         
         this.ticker = '';
         this.clues = [];
-        this.hasClues = false;   
+        this.hasClues = false;  
+        this.filter = ''; 
       }      
     },
 
@@ -214,7 +247,7 @@ export default {
       setInterval(async() => {
           const f = await fetch(`https://min-api.cryptocompare.com/data/price?fsym=${tickerTitle}&tsyms=USD&api_key=0c306692dcb0454412241eb93b1398b038e292c74c66c2ded01cfba0d11859eb`);
           const data = await f.json();
-          if(data.Response === "Error"){
+          if(data.Response === "Error" || Object.keys(data).length === 0){
             this.myTickers.find(ticker => ticker.title === tickerTitle).price = "нет данных";
           }else{
               this.myTickers.find(ticker => ticker.title === tickerTitle).price = data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
@@ -266,6 +299,29 @@ export default {
       }else{
         this.notExistCoin = true;
       }
+    },
+
+    filteredCoins(){
+      const start = (this.page - 1) * 6;
+      const end = this.page * 6;
+      const filteredTickers = this.myTickers.filter(myTicker => myTicker.title.includes(this.filter.toUpperCase()));
+
+      this.hasNextPage = filteredTickers.length > end;
+      
+      return filteredTickers.slice(start, end);
+    },
+    setUrlParams(){
+      window.history.pushState(null, document.title, `${window.location.pathname}?filter=${this.filter}&page=${this.page}`);
+    }
+  },
+
+  watch: {
+    filter(){
+      this.page = 1;
+      this.setUrlParams();
+    },
+    page(){
+      this.setUrlParams();
     }
   }
 }
