@@ -50,7 +50,7 @@
         
       </div>
       <button
-        @click="add"
+        @click="add(ticker)"
         type="button"
         class="my-4 inline-flex items-center py-2 px-4 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-full text-white bg-gray-600 hover:bg-gray-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
       >
@@ -165,23 +165,7 @@ export default {
   data(){
     return {
       ticker: '',
-      myTickers: [
-        {
-          id: 1,
-          title: 'demo1',
-          price: '-',
-        },
-        {
-          id: 2,
-          title: 'demo2',
-          price: '-',
-        },
-        {
-          id: 3,
-          title: 'demo3',
-          price: '-',
-        },
-      ],
+      myTickers: [],
       select: null,
       graph: [],
       coinList: null,
@@ -195,6 +179,14 @@ export default {
       const f = await fetch(`https://min-api.cryptocompare.com/data/all/coinlist?summary=true&api_key=0c306692dcb0454412241eb93b1398b038e292c74c66c2ded01cfba0d11859eb`);
       const data = await f.json();
       this.coinList = Object.values(data.Data).map(item => item.Symbol);
+
+      const tickersData = localStorage.getItem('coin-list');
+      if(tickersData){
+        this.myTickers = JSON.parse(tickersData);
+        this.myTickers.forEach(ticker => {
+          this.subscribeToUpdates(ticker.title);
+        })
+      }
     },
   
   methods: {
@@ -205,25 +197,34 @@ export default {
         price: '-'
       }
       if(!this.addedTicker && !this.notExistCoin){
+
           this.myTickers.push(newTicker);
-        setInterval(async() => {
-          const f = await fetch(`https://min-api.cryptocompare.com/data/price?fsym=${newTicker.title}&tsyms=USD&api_key=0c306692dcb0454412241eb93b1398b038e292c74c66c2ded01cfba0d11859eb`);
+
+          localStorage.setItem('coin-list', JSON.stringify(this.myTickers));
+
+          this.subscribeToUpdates(newTicker.title);
+        
+        this.ticker = '';
+        this.clues = [];
+        this.hasClues = false;   
+      }      
+    },
+
+    subscribeToUpdates(tickerTitle){
+      setInterval(async() => {
+          const f = await fetch(`https://min-api.cryptocompare.com/data/price?fsym=${tickerTitle}&tsyms=USD&api_key=0c306692dcb0454412241eb93b1398b038e292c74c66c2ded01cfba0d11859eb`);
           const data = await f.json();
           if(data.Response === "Error"){
-            this.myTickers.find(ticker => ticker.title === newTicker.title).price = "нет данных";
+            this.myTickers.find(ticker => ticker.title === tickerTitle).price = "нет данных";
           }else{
-              this.myTickers.find(ticker => ticker.title === newTicker.title).price = data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
+              this.myTickers.find(ticker => ticker.title === tickerTitle).price = data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
 
-            if(this.select?.title === newTicker.title){
+            if(this.select?.title === tickerTitle){
               this.graph.push(data.USD)
           }
           }
           
         }, 3000)
-        this.ticker = '';
-        this.clues = [];
-        this.hasClues = false;   
-      }      
     },
 
     clickToClue(clue){
