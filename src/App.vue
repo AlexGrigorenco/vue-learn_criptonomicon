@@ -282,11 +282,11 @@ export default {
       }
       if(!this.addedTicker && !this.notExistCoin){
 
-          this.myTickers = [...this.myTickers, newTicker];
+        this.myTickers = [...this.myTickers, newTicker];
 
-          subscribeToUpdateTickers(newTicker.title, (newPrice) => {
-            this.updateTickersPrice(newTicker.title, newPrice);
-          });
+        subscribeToUpdateTickers(newTicker.title, (newPrice) => {
+          this.updateTickersPrice(newTicker.title, newPrice);
+        });
         
         this.ticker = '';
         this.clues = [];
@@ -295,18 +295,21 @@ export default {
       }      
     },
 
-    async updateTickersPrice(tickerName, price){
+    updateTickersPrice(tickerName, price){
           this.myTickers.filter(ticker => ticker.title === tickerName).forEach(t => {
             t.price = price;
+            if(t.title === this.select?.title){
+              this.graph.push(price);
+            }
           })
-          localStorage.setItem('coin-list', JSON.stringify(this.myTickers));
+          
     },
 
     formatPrice(price){
       if(typeof price === 'string'){
         return price;
       }
-      return price > 1 ? price.toFixed(2) : price.toPrecision(2);
+      return price > 1 ? price.toFixed(3) : price.toPrecision(3);
     },
 
     clickToClue(clue){
@@ -363,7 +366,8 @@ export default {
     myTickers(){
       if(this.paginatedCoins.length === 0 && this.page > 1){
         this.page -= 1;
-      }      
+      }     
+      localStorage.setItem('coin-list', JSON.stringify(this.myTickers)); 
     }
   }
 }
