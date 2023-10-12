@@ -190,7 +190,7 @@
 
 <script>
 
-import {loadTickerPrice} from './api';
+import {subscribeToUpdateTickers, unSubscribeFromUpdateTickers, getCoinsSymbolsList} from './api';
 
 
 
@@ -216,23 +216,27 @@ export default {
       page: 1,
     }
   },
+
   created: async function(){
       const windowData = Object.fromEntries(new URL(window.location).searchParams.entries());
 
       windowData.filter ? this.filter = windowData.filter : null;
       windowData.page ? this.page = +windowData.page : null;
 
-      const f = await fetch(`https://min-api.cryptocompare.com/data/all/coinlist?summary=true&api_key=0c306692dcb0454412241eb93b1398b038e292c74c66c2ded01cfba0d11859eb`);
-      const data = await f.json();
-      this.coinList = Object.values(data.Data).map(item => item.Symbol);
+      this.coinList = await getCoinsSymbolsList();
 
       const tickersData = localStorage.getItem('coin-list');
 
       if(tickersData){
         this.myTickers = JSON.parse(tickersData);
+        this.myTickers.forEach(ticker => {
+          subscribeToUpdateTickers(ticker.title, newPrice => {
+            this.updateTickersPrice(ticker.title, newPrice);
+          });
+        })
       }
 
-      setInterval(this.updateTickersPrice, 3000);
+      //setInterval(this.updateTickersPrice, 3000);
     },
 
     computed: {
@@ -280,7 +284,9 @@ export default {
 
           this.myTickers = [...this.myTickers, newTicker];
 
-          //this.updateTickersPrice([newTicker.title]);
+          subscribeToUpdateTickers(newTicker.title, (newPrice) => {
+            this.updateTickersPrice(newTicker.title, newPrice);
+          });
         
         this.ticker = '';
         this.clues = [];
@@ -289,18 +295,10 @@ export default {
       }      
     },
 
-    async updateTickersPrice(){
-          if(!this.myTickers.length){
-            return;
-          }
-          const dataTickerPrice = await loadTickerPrice(this.myTickers.map(ticker => ticker.title).join(','));
-
-          this.myTickers.forEach(ticker => {
-            const price = dataTickerPrice[ticker.title];
-            
-            ticker.price = price ?? 'has\'t data';
+    async updateTickersPrice(tickerName, price){
+          this.myTickers.filter(ticker => ticker.title === tickerName).forEach(t => {
+            t.price = price;
           })
-
           localStorage.setItem('coin-list', JSON.stringify(this.myTickers));
     },
 
@@ -326,6 +324,8 @@ export default {
     },
 
     deleteTicker(id){
+      unSubscribeFromUpdateTickers(this.myTickers.filter(ticker => ticker.id === id)[0].title);
+
       this.myTickers = this.myTickers.filter(ticker => ticker.id !== id);
       
       this.select?.id === id ? this.select = null : null;
