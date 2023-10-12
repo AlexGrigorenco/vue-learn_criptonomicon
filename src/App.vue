@@ -114,7 +114,7 @@
               {{ myTicker.title }} - USD
             </dt>
             <dd class="mt-1 text-3xl font-semibold text-gray-900">
-              {{ myTicker.price }}
+              {{ formatPrice(myTicker.price) }}
             </dd>
           </div>
           <div class="w-full border-t border-gray-200"></div>
@@ -189,6 +189,11 @@
 </template>
 
 <script>
+
+import {loadTickerPrice} from './api';
+
+
+
 export default {
   name: 'App',
   data(){
@@ -222,12 +227,12 @@ export default {
       this.coinList = Object.values(data.Data).map(item => item.Symbol);
 
       const tickersData = localStorage.getItem('coin-list');
+
       if(tickersData){
         this.myTickers = JSON.parse(tickersData);
-        // this.myTickers.forEach(ticker => {
-        //   this.subscribeToUpdates(ticker.title);
-        // })
       }
+
+      setInterval(this.updateTickersPrice, 3000);
     },
 
     computed: {
@@ -275,7 +280,7 @@ export default {
 
           this.myTickers = [...this.myTickers, newTicker];
 
-          this.subscribeToUpdates(newTicker.title);
+          //this.updateTickersPrice([newTicker.title]);
         
         this.ticker = '';
         this.clues = [];
@@ -284,21 +289,26 @@ export default {
       }      
     },
 
-    subscribeToUpdates(tickerTitle){
-      setInterval(async() => {
-          const f = await fetch(`https://min-api.cryptocompare.com/data/price?fsym=${tickerTitle}&tsyms=USD&api_key=0c306692dcb0454412241eb93b1398b038e292c74c66c2ded01cfba0d11859eb`);
-          const data = await f.json();
-          if(data.Response === "Error" || Object.keys(data).length === 0){
-            this.myTickers.find(ticker => ticker.title === tickerTitle).price = "нет данных";
-          }else{
-              this.myTickers.find(ticker => ticker.title === tickerTitle).price = data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
+    async updateTickersPrice(){
+          if(!this.myTickers.length){
+            return;
+          }
+          const dataTickerPrice = await loadTickerPrice(this.myTickers.map(ticker => ticker.title).join(','));
 
-            if(this.select?.title === tickerTitle){
-              this.graph.push(data.USD)
-          }
-          }
-          
-        }, 3000)
+          this.myTickers.forEach(ticker => {
+            const price = dataTickerPrice[ticker.title];
+            
+            ticker.price = price ?? 'has\'t data';
+          })
+
+          localStorage.setItem('coin-list', JSON.stringify(this.myTickers));
+    },
+
+    formatPrice(price){
+      if(typeof price === 'string'){
+        return price;
+      }
+      return price > 1 ? price.toFixed(2) : price.toPrecision(2);
     },
 
     clickToClue(clue){
@@ -353,8 +363,7 @@ export default {
     myTickers(){
       if(this.paginatedCoins.length === 0 && this.page > 1){
         this.page -= 1;
-      }
-      localStorage.setItem('coin-list', JSON.stringify(this.myTickers));
+      }      
     }
   }
 }
